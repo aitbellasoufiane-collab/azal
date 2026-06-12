@@ -10,11 +10,15 @@ import pygame
 import random
 import sys
 from config import *
+from sound_manager import SoundManager
 
 # تهيئة pygame
 pygame.init()
 
-# إعداد الشاشة
+# تهيئة مدير الأصوات
+sound_manager = SoundManager()
+
+# إع��اد الشاشة
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("🎮 Azal - لعبة المحمدية الواعرة 😂")
 clock = pygame.time.Clock()
@@ -46,6 +50,7 @@ enemy_y = -40
 enemy_speed = ENEMY_SPEED
 enemy_spawn_timer = 0
 current_enemy_spawn_rate = ENEMY_SPAWN_RATE
+enemy_spotted = False
 
 # نصوص كوميدية
 funny_text_display = ""
@@ -54,6 +59,7 @@ funny_timer = 0
 # المتغيرات الإضافية
 combo = 0
 high_score = 0
+sound_enabled = True
 
 # دالة لرسم النص
 def draw_text(text, font, color, x, y):
@@ -118,6 +124,10 @@ def draw_ui():
     # أفضل نقطة
     high_score_text = f"High: {high_score}"
     draw_text(high_score_text, font_small, ORANGE, WIDTH - 140, 10)
+    
+    # حالة الصوت
+    sound_status = "🔊 ON" if sound_enabled else "🔇 OFF"
+    draw_text(sound_status, font_small, BLACK, WIDTH - 90, HEIGHT - 30)
 
 # دالة لرسم النصوص الكوميدية
 def draw_funny_text():
@@ -162,8 +172,12 @@ def draw_game_over():
 def update_level():
     global level, current_hole_spawn_rate, current_enemy_spawn_rate, enemy_speed
     
+    old_level = level
     if score >= level * 100:
         level = min(level + 1, 5)
+        if level > old_level:
+            sound_manager.play_level_up()
+            funny_text_display = f"مستوى جديد! Level {level} 🌟"
         level_config = LEVELS[level]
         current_hole_spawn_rate = level_config['hole_rate']
         current_enemy_spawn_rate = level_config['enemy_rate']
@@ -174,7 +188,10 @@ def reset_game():
     global player_x, player_y, score, money, level, game_over
     global holes, hole_spawn_timer, enemy_x, enemy_y, enemy_spawn_timer
     global current_hole_spawn_rate, current_enemy_spawn_rate, enemy_speed
-    global funny_text_display, funny_timer, combo
+    global funny_text_display, funny_timer, combo, high_score, enemy_spotted
+    
+    if score > high_score:
+        high_score = score
     
     player_x = WIDTH // 2
     player_y = HEIGHT - 80
@@ -193,6 +210,7 @@ def reset_game():
     funny_text_display = ""
     funny_timer = 0
     combo = 0
+    enemy_spotted = False
 
 # الحلقة الرئيسية
 running = True
@@ -211,8 +229,11 @@ while running:
                 elif not game_paused and not player_jump:
                     player_jump = True
                     player_jump_speed = 15
+                    sound_manager.play_jump()
             if event.key == pygame.K_p:
                 game_paused = not game_paused
+            if event.key == pygame.K_m:
+                sound_enabled = sound_manager.toggle_sound()
     
     # إذا كانت اللعبة متوقفة أو انتهت، لا نحدّث شيء
     if game_over or game_paused:
@@ -258,6 +279,7 @@ while running:
             score += POINTS_HOLE_DODGE
             combo += 1
             money = int(score * MONEY_MULTIPLIER)
+            sound_manager.play_dodge()
             funny_text_display = random.choice(FUNNY_TEXTS)
             funny_timer = 30
             update_level()
@@ -268,6 +290,12 @@ while running:
         enemy_x = random.randint(0, WIDTH - 40)
         enemy_y = -40
         enemy_spawn_timer = 0
+        enemy_spotted = False
+    
+    # تحريك العدو وإصدار صوت عند ظهوره
+    if enemy_y > 0 and not enemy_spotted:
+        sound_manager.play_enemy_spotted()
+        enemy_spotted = True
     
     enemy_y += enemy_speed
     
@@ -279,11 +307,13 @@ while running:
             player_y + player_height > hole[1]):
             score = max(0, score - 10)
             combo = 0
+            sound_manager.play_hit()
             funny_text_display = "سقطت في الثقب! 🕳️"
             funny_timer = 50
             player_y = HEIGHT - 80
             if score < 0:
                 game_over = True
+                sound_manager.play_game_over()
                 if score > high_score:
                     high_score = score
     
@@ -296,13 +326,17 @@ while running:
         funny_timer = 50
         score += POINTS_ENEMY_DODGE
         combo += 1
+        sound_manager.play_laugh()
+        sound_manager.play_money_earned()
         money = int(score * MONEY_MULTIPLIER)
         enemy_y = -100
+        enemy_spotted = False
         update_level()
     
     # إذا خرج الشرطي من الشاشة، لا نحسبه
     if enemy_y > HEIGHT:
         enemy_y = -100
+        enemy_spotted = False
     
     # رسم كل شيء
     draw_background()
